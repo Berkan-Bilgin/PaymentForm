@@ -1,4 +1,5 @@
-﻿using System;
+﻿using PaymentForm;
+using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -39,10 +40,10 @@ namespace PaymentForm
                     {
                         while (reader.Read())
                         {
-                            string paymentMethodName = reader["PaymentMethodName"].ToString(); // Kolon adı
+                            string paymentMethodName = reader["PaymentMethodName"].ToString();
                             string paymentMethodValue = reader["PaymentMethodValue"].ToString();
                             int paymentMethodId = Convert.ToInt32(reader["PaymentMethodId"]);
-                            list.Add(new PaymentMethod { PaymentMethodId = paymentMethodId, PaymentMethodName = paymentMethodName, PaymentMethodValue = paymentMethodValue }); // Veriyi listeye ekle
+                            list.Add(new PaymentMethod { PaymentMethodId = paymentMethodId, PaymentMethodName = paymentMethodName, PaymentMethodValue = paymentMethodValue });
                         }
                     }
                 }
@@ -50,31 +51,40 @@ namespace PaymentForm
             comboBoxPaymentMethod.Items.AddRange(list.ToArray());
         }
 
-        private void label1_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
-        }
-
-        private void label2_Click(object sender, EventArgs e)
-        {
-
-        }
-
         private void btnPay_Click(object sender, EventArgs e)
         {
-
             PaymentMethod selectedPaymentMethod = comboBoxPaymentMethod.SelectedItem as PaymentMethod;
-            string className = selectedPaymentMethod.PaymentMethodValue;
-            string displayName = selectedPaymentMethod.PaymentMethodName;
+            if (selectedPaymentMethod == null)
+            {
+                MessageBox.Show("Lütfen bir ödeme yöntemi seçin.");
+                return;
+            }
 
+            if (!double.TryParse(textBoxAmount.Text, out double amount))
+            {
+                MessageBox.Show("Lütfen geçerli bir miktar girin.");
+                return;
+            }
+
+            try
+            {
+                Type paymentType = GeneratePaymentType(selectedPaymentMethod);
+                object instance = CreatePaymentInstance(paymentType);
+
+                string resultMessage = InvokePaymentMethod(instance, paymentType, amount);
+                lblResult.Text = resultMessage;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Hata oluştu: " + ex.Message);
+            }
+        }
+
+        private Type GeneratePaymentType(PaymentMethod selectedPaymentMethod)
+        {
+            string className = selectedPaymentMethod.PaymentMethodValue;
             string interfaceName = "IPaymentMethod";
             string methodName = "ProcessPayment";
-
 
             CodeDomProvider provider = CodeDomProvider.CreateProvider("CSharp");
             CompilerParameters parameters = new CompilerParameters
@@ -100,29 +110,41 @@ namespace PaymentForm
             CompilerResults results = provider.CompileAssemblyFromSource(parameters, code);
             if (results.Errors.Count > 0)
             {
-                MessageBox.Show("Hata oluştu: " + results.Errors[0].ErrorText);
-                return;
+                throw new Exception("Hata oluştu: " + results.Errors[0].ErrorText);
             }
 
-            // Derlenen sınıfın örneğini oluşturma
-            Type type = results.CompiledAssembly.GetType(className);
-            object instance = Activator.CreateInstance(type);
+            return results.CompiledAssembly.GetType(className);
+        }
 
-            if (!double.TryParse(textBoxAmount.Text, out double amount))
-            {
-                MessageBox.Show("Lütfen geçerli bir miktar girin.");
-                return;
-            }
+        private object CreatePaymentInstance(Type paymentType)
+        {
+            return Activator.CreateInstance(paymentType);
+        }
 
-            // Metodu çağırma
-            var method = type.GetMethod(methodName);
-            string resultMessage = (string)method.Invoke(instance, new object[] { amount });
+        //private string InvokePaymentMethod(object instance, Type paymentType, double amount)
+        //{
+        //    string methodName = "ProcessPayment";
+        //    var method = paymentType.GetMethod(methodName);
+        //    return (string)method.Invoke(instance, new object[] { amount });
+        //}
 
-            // Sonucu ekrana yazdırma
-            lblResult.Text = resultMessage;
+        private string InvokePaymentMethod(object instance, Type paymentType, double amount)
+        {
+            dynamic dynamicInstance = instance;
+            return dynamicInstance.ProcessPayment(amount);
+        }
 
 
+        private void label2_Click(object sender, EventArgs e)
+        {
+        }
 
+        private void label1_Click(object sender, EventArgs e)
+        {
+        }
+
+        private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
+        {
         }
     }
 }
